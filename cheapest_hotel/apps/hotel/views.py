@@ -6,7 +6,8 @@ from hotel.models import Hotel, Tax
 from collections import defaultdict
 from rest_framework.views import APIView
 from rest_framework.response import Response
-
+from rest_framework import status
+from django.db.models import Q
 
 class HotelViewSet(viewsets.ModelViewSet):
 
@@ -19,6 +20,22 @@ class TaxViewSet(viewsets.ModelViewSet):
     queryset = Tax.objects.all()
     serializer_class = TaxSerializer
 
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        monday = bool(data.get('monday', None))
+        tuesday = bool(data.get('tuesday', None))
+        wednesday = bool(data.get('wednesday', None))
+        thursday = bool(data.get('thursday', None))
+        friday = bool(data.get('friday', None))
+        saturday = bool(data.get('saturday', None))
+        sunday = bool(data.get('sunday', None))
+        tax = Tax.objects.filter(Q(monday=monday) | Q(tuesday=tuesday) | Q(wednesday=wednesday) | Q(thursday=thursday) |
+                                 Q(friday=friday) | Q(saturday=saturday) | Q(sunday=sunday), user=data.get('user'),
+                                 hotel=data.get('hotel').split('/')[-2])
+        if tax:
+            return Response({"Já existe uma taxa para um desses dias com o mesmo hotel e tipo de usuário!", status.HTTP_400_BAD_REQUEST})
+        response = super().create(request)
+        return Response(response.data)
 
 class Cheapest(APIView):
     USERS = {
@@ -27,6 +44,8 @@ class Cheapest(APIView):
     }
 
     def get(self, request):
+        if not request.query_params:
+            return Response({'Query string é obrigatória', status.HTTP_400_BAD_REQUEST})
         user, days = self._sanitize_data(request.query_params)
         hotel_prices = defaultdict(lambda: {'price': 0.0})
         for day in days:
